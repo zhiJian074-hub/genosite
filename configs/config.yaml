@@ -1,0 +1,42 @@
+    settings:
+      seed: 2024
+
+    # tau: 0.8
+    tau: 0.8
+
+    model:
+      model_dir: ./pretrained_weights
+      esm_version: esm1b_t33_650M_UR50S # esm1v_t33_650M_UR90S_1 esm2_t33_650M_UR50D
+      pubmed_version: BiomedNLP-BiomedBERT-base-uncased-abstract # BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext
+
+    model_name: AP_align_fuse
+    prior_knowledge: ./datasets/generated_desc_test.json
+
+    dataset:
+      data_path: ./datasets
+      max_length: 512
+
+    train:
+      gpu_id: 0
+      batch_size: 24
+      align_epoch: 1
+      epochs: 80
+#      epochs: 100
+      lr: 5.0e-05
+      metrics: ['loss', 'accuracy', 'precision', 'recall', 'f1', 'auc', 'prc', 'mcc', 'oss', 'fpr','recall_at_5p','recall_at_10p']
+
+    val:
+      batch_size: 24
+
+    test:
+      batch_size: 24
+
+    metric:
+      # token_threshold: 0.5
+      token_threshold: 0.5
+
+    # 元学习参数
+    meta:
+      alpha: 0.0015         # 外层学习率
+      inner_lr: 0.0005     # 内环更新速率
+      meta_epochs: 10       # 元学习迭代次数

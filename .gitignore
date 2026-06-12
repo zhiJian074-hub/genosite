@@ -1,0 +1,16 @@
+data/
+outputs/
+checkpoints/
+runs/
+wandb/
+
+*.pt
+*.pth
+*.ckpt
+*.pkl
+*.h5
+*.npy
+*.npz
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
