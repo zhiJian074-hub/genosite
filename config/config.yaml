@@ -20,8 +20,7 @@
       gpu_id: 0
       batch_size: 24
       align_epoch: 1
-      epochs: 80
-#      epochs: 100
+      epochs: 50
       lr: 5.0e-05
       metrics: ['loss', 'accuracy', 'precision', 'recall', 'f1', 'auc', 'prc', 'mcc', 'oss', 'fpr','recall_at_5p','recall_at_10p']
 
@@ -39,4 +38,4 @@
     meta:
       alpha: 0.0015         # 外层学习率
       inner_lr: 0.0005     # 内环更新速率
-      meta_epochs: 10       # 元学习迭代次数
+      meta_epochs: 1       # 元学习迭代次数
