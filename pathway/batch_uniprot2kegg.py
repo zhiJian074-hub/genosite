@@ -1,17 +1,17 @@
-# 根据uniprot_ids生成protein2pathway.tsv
-# 完成对于pathway的映射分类
+# Generate protein2pathway.tsv from UniProt IDs
+# Map proteins to pathways
 
 import requests
 import time
 
-# ========== 通用请求函数 ==========
+# ========== Reusable request helper ==========
 def safe_get(url, retries=3, wait=3):
     """
-    带重试机制的 GET 请求
+    GET request with retries
     """
     for i in range(retries):
         try:
-            r = requests.get(url, timeout=20)  # 20 秒超时
+            r = requests.get(url, timeout=20)  # 20-second timeout
             if r.status_code == 200 and r.text.strip():
                 return r
         except Exception as e:
@@ -26,7 +26,7 @@ def uniprot_to_kegg(uniprot_id):
     if not r:
         return None
     try:
-        return r.text.strip().split("\t")[1]  # 例如 "hsa:1956"
+        return r.text.strip().split("\t")[1]  # For example, "hsa:1956"
     except:
         return None
 
@@ -42,7 +42,7 @@ def kegg_gene_to_pathways(kegg_gene):
     except:
         return []
 
-# ========== 主流程 ==========
+# ========== Main workflow ==========
 def process_uniprot_list(input_file, output_file):
     with open(input_file, "r") as f:
         uniprot_ids = [line.strip() for line in f if line.strip()]
@@ -66,12 +66,12 @@ def process_uniprot_list(input_file, output_file):
 
             print(f"✅ {idx}/{len(uniprot_ids)}: {uid} ({kegg_gene}) → {len(pathways)} 条通路")
 
-            time.sleep(0.5)  # 避免请求过快被 KEGG 屏蔽
+            time.sleep(0.5)  # Throttle requests to avoid KEGG rate limits
 
     print(f"\n全部完成 ✅，结果保存在 {output_file}")
 
-# ========== 入口 ==========
+# ========== Entry point ==========
 if __name__ == "__main__":
-    input_file = "uniprot_ids.txt"       # 输入：每行一个 UniProt ID
-    output_file = "protein2pathway.tsv"  # 输出：映射结果
+    input_file = "uniprot_ids.txt"       # Input: one UniProt ID per line
+    output_file = "protein2pathway.tsv"  # Output: mapping results
     process_uniprot_list(input_file, output_file)
