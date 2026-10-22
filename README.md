@@ -26,15 +26,33 @@ The three representations are projected into a shared space and combined through
 
 ## Interface previews
 
-Four interface views are planned to show the intended GenoSite workflow:
+The four images below present a proposed GenoSite software interface using **human GAPDH (UniProt: P04406)** as a consistent example. Its canonical sequence has 335 amino acids, and KEGG lists it in **hsa00010: Glycolysis / Gluconeogenesis**. The protein identity, displayed sequence fragments, pathway membership, and cited residue annotations correspond to public records. The interface and prediction scores are illustrative; these images are not screenshots of an executed GenoSite analysis.
 
-1. **Input:** enter a protein sequence and identify the protein.
-2. **Context:** inspect the functional description and pathway-derived protein group.
-3. **Prediction:** view residue-level active-site scores along the sequence.
-4. **Results:** inspect predicted residues together with their supporting context.
+### 1. Protein input
 
-These views will be added here after the interface images are created. They are interface concepts and should not be presented as screenshots of an implemented application.
+The input view shows the P04406 identifier, a preview of its canonical amino-acid sequence, a functional description, and the selected KEGG-derived pathway context. The sequence preview displays residues 1–60 of the full 335-residue protein.
 
+![GenoSite interface concept: P04406 protein sequence and functional-description input](genosite-interface-previews-v2/01-sequence-input-P04406.png)
+
+### 2. Pathway context
+
+The context view places GAPDH alongside selected human proteins from the same **hsa00010** pathway. Connections indicate shared pathway membership and functional association; they do not indicate physical genomic proximity or direct protein interaction.
+
+![GenoSite interface concept: GAPDH pathway-derived functional context](genosite-interface-previews-v2/02-pathway-context-P04406.png)
+
+### 3. Residue-level prediction
+
+The prediction view illustrates per-residue scores across the 335-amino-acid sequence and zooms in on the region containing **Cys152** and **His179**. UniProt annotates Cys152 as an active-site nucleophile and His179 as a residue that activates a thiol group during catalysis. The plotted scores are example interface data, not measured GenoSite outputs.
+
+![GenoSite interface concept: residue-level scores and annotated GAPDH positions](genosite-interface-previews-v2/03-residue-predictions-P04406.png)
+
+### 4. Analysis report
+
+The report view brings together illustrative candidate scores, the corresponding UniProt annotations, short verified sequence windows, and the KEGG pathway context. It shows how a future interface could make residue-level results inspectable in one place.
+
+![GenoSite interface concept: GAPDH residue report with sequence and pathway context](genosite-interface-previews-v2/04-analysis-report-P04406.png)
+
+Protein sequence and residue annotations: [UniProt P04406](https://www.uniprot.org/uniprotkb/P04406). Pathway membership: [KEGG hsa:2597](https://www.kegg.jp/entry/hsa:2597) and [hsa00010](https://www.kegg.jp/entry/hsa00010).
 ## Repository structure
 
 ```text
