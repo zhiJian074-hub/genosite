@@ -23,18 +23,6 @@ GenoSite predicts protein active-site residues by combining three sources of inf
 
 The three representations are projected into a shared space and combined through hierarchical multimodal interaction. Adaptive protein-level fusion then supplies functional context to the residue-level prediction module. In the pathway construction used in the study, retained groups contain 15–30 proteins.
 
-## Results
-
-The following results are from the primary ProTAD evaluation with a 10% sequence-identity setting. Values are reported as the mean ± two standard deviations.
-
-| Model | Fmax ↑ | AUPRC ↑ | MCC ↑ | OS ↑ | FPR ↓ |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| MMSite (without pathway context) | 0.8189 ± 0.02 | **0.8863 ± 0.01** | **0.8267 ± 0.02** | **0.8559 ± 0.02** | 0.1785 ± 0.02 |
-| **GenoSite** | **0.8206 ± 0.02** | 0.8761 ± 0.01 | 0.8254 ± 0.02 | 0.8328 ± 0.02 | **0.1676 ± 0.02** |
-
-GenoSite achieves a higher Fmax and a lower false-positive rate than the pathway-free counterpart in this comparison. The pathway-free counterpart has higher AUPRC, MCC, and OS. These results show the value of pathway context while also making the trade-offs between evaluation metrics visible.
-
-The paper further examines pathway perturbation, component ablation, alternative sequence backbones, and pathway-related biological analyses. See the paper for the experimental protocols and interpretation of those studies.
 
 ## Interface previews
 
