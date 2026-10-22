@@ -26,21 +26,24 @@ The pathway context used in this project represents curated functional associati
 
 ---
 
-## Repository Structure
+## Repository structure
 
-```bash
-GenoSite/
-├── config/                 # Configuration files
-├── dataprocess/             # Data preprocessing scripts
-├── utils/                   # Utility functions
-├── pretrained_weights/      # Pretrained weights
-├── datasets/                # Datasets
-├── environment.yml          # Conda environment file
-├── requirements.txt         # Python dependencies
-├── model.py                 # Model architecture
-├── train.py                 # Main training script
-├── inference.py             # Inference script
-└── README.md
+```text
+genosite/
+├── config/
+│   └── config.yaml              # Model and training configuration
+├── dataprocess/                  # Dataset preparation guidance and scripts
+├── datasets/
+│   └── infer_samples.tsv        # Example input data
+├── pathway/                      # UniProt-to-KEGG mapping and group preparation
+├── pretrained_weights/
+│   └── placeholder              # Location for external model assets
+├── utils/                        # Shared utilities
+├── environment.yml              # Reference Conda environment
+├── requirements.txt             # Partial dependency list
+├── inference.py                  # Research inference script
+├── model.py                      # GenoSite model
+└── train.py                      # Training and evaluation
 ```
 
 
