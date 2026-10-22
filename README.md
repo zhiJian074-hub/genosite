@@ -125,7 +125,7 @@ Pathway annotations and functional descriptions can be related to the biological
 
 If GenoSite is useful in your research, please cite the paper:
 
-> Xianjun Han, Zhijian Deng, Yongfu Zhu, Zijian Wu, Can Bai, and Renbao Huang. **GenoSite: Pathway-Guided Multimodal Learning for Residue-Level Protein Active Site Prediction.**
+>  **GenoSite: Pathway-Guided Multimodal Learning for Residue-Level Protein Active Site Prediction.**
 
 A publication link, DOI, and formal BibTeX entry can be added once they are available.
 
