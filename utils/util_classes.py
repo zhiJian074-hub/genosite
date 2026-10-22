@@ -8,17 +8,17 @@ from transformers import AutoTokenizer
 from . import get_max_length, get_str, get_col_name_list
 
 
-# 这个模块会在训练时读取你的 gLM/batch.pkl.glm.embs.pkl 文件，
-# 并且根据蛋白质 entry id 自动匹配对应的 gLM 向量。
+# During training, this module reads gLM/batch.pkl.glm.embs.pkl
+# and matches gLM vectors by protein entry ID.
 class GLMEmbeddingLookup:
     """
-    从 gLM embedding 文件加载蛋白质向量。
+    Load protein vectors from a gLM embedding file.
     """
 
     def __init__(self, glm_emb_path="gLM/batch.pkl.glm.embs.pkl"):
         with open(glm_emb_path, "rb") as f:
             data = pk.load(f)
-            # 自动判断是 list 还是 dict
+            # Detect whether the data is a list or a dictionary
             if isinstance(data, dict):
                 self.glm_embs = data
             elif isinstance(data, list):

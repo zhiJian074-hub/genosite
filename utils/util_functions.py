@@ -157,22 +157,22 @@ from sklearn.metrics import (
     roc_auc_score, average_precision_score, matthews_corrcoef
 )
 
-# 你原来的 cal_os / cal_fpr 等函数保持不变
+# Keep the existing cal_os, cal_fpr, and related functions unchanged
 
 def _to_np_1d(x):
-    """转 1D numpy 数组（安全）。"""
+    """Safely convert to a 1D NumPy array."""
     a = np.asarray(x)
     return a.reshape(-1)
 
 def _slice_valid(vec, L, has_cls=True):
     """
-    按长度 L 裁剪，并处理 CLS：
-    - 如果 has_cls=True：取 [1:L+1]
-    - 否则：取 [:L]
+    Slice to length L and handle the CLS token:
+    - If has_cls=True, use [1:L+1]
+    - Otherwise, use [:L]
     """
     v = _to_np_1d(vec)
     if has_cls:
-        # 期望 v[0] 是 CLS，占 1 位，因此取 1..L
+        # v[0] is expected to be CLS, so take positions 1 through L
         return v[1:L+1]
     else:
         return v[:L]
@@ -180,43 +180,43 @@ def _slice_valid(vec, L, has_cls=True):
 def topk_recall(scores, labels, L, percent=0.05, has_cls=False):
     """
     Top-k Recall（k = percent * L）：
-    - scores, labels: 单个样本的一维向量
-    - L: 该样本真实长度（不含 padding；不含 CLS）
-    - has_cls: 若 scores/labels 包含 CLS 在 0 位，这里传 True（本函数会内部裁剪）
+    - scores, labels: 1D vectors for one sample
+    - L: True sample length (excluding padding and CLS)
+    - has_cls: Set True if scores/labels contain CLS at position 0; this function will slice it out
     """
     s = _slice_valid(scores, L, has_cls=has_cls)
     y = _slice_valid(labels, L, has_cls=has_cls).astype(int)
 
-    if len(s) == 0:  # 空保护
+    if len(s) == 0:  # Handle empty input
         return 0.0
     pos = int(y.sum())
-    if pos == 0:     # 无正例时定义为 0
+    if pos == 0:     # Define the value as zero when there are no positive labels
         return 0.0
 
     k = max(1, int(round(L * float(percent))))
     k = min(k, len(s))
 
-    # 取 top-k 索引
+    # Select the top-k indices
     idx = np.argsort(-s)[:k]
     tp = int(y[idx].sum())
     return float(tp) / float(pos)
 
 def measure(all_labels, all_preds, probabilities, lengths):
     """
-    统一、稳健的指标计算：
-    - 输入形状可为：
-        * [B, T]（批次）或
-        * [T]（单样本）
-    - lengths: [B] 或标量；每个元素是该样本真实长度（不含 padding；不含 CLS）
-    - 内部会按每个样本的 L 做裁剪、并从第 1 位开始去掉 CLS（与原实现对齐）
+    Consistent, robust metric calculation:
+    - Accepted input shapes:
+        * [B, T] (batch), or
+        * [T] (single sample)
+    - lengths: [B] or a scalar; each element is the true sample length (excluding padding and CLS)
+    - Slice each sample to L and remove CLS by starting at position 1, as in the original implementation
     """
-    # 统一成批次形状
+    # Normalize to a batch shape
     lab = np.asarray(all_labels, dtype=object)
     pred = np.asarray(all_preds, dtype=object)
     prob = np.asarray(probabilities, dtype=object)
     Ls = lengths
 
-    # 如果是单样本，包一层 batch 维
+    # Add a batch dimension for a single sample
     if lab.ndim == 1 and pred.ndim == 1 and prob.ndim == 1 and (np.isscalar(Ls) or (isinstance(Ls, np.ndarray) and Ls.ndim == 0)):
         lab = lab.reshape(1, -1)
         pred = pred.reshape(1, -1)
@@ -226,56 +226,56 @@ def measure(all_labels, all_preds, probabilities, lengths):
     Ls = np.asarray(Ls).reshape(-1).astype(int)
     B = lab.shape[0]
 
-    # 累加器
+    # Accumulators
     accuracy = precision = recall = f1 = auc = prc = mcc = oss = fpr = 0.0
     recall_at_5p = recall_at_10p = 0.0
 
     for i in range(B):
         L = int(Ls[i])
 
-        # 逐样本裁剪 + 去 CLS（与原来的 [1:length+1] 逻辑一致）
+        # Slice each sample and remove CLS using the original [1:length+1] logic
         y = _slice_valid(lab[i], L, has_cls=True).astype(int)
         p = _slice_valid(pred[i], L, has_cls=True).astype(int)
         s = _slice_valid(prob[i], L, has_cls=True).astype(float)
 
-        # 容错：如果该样本有效长度为 0，跳过
+        # Skip samples with zero valid length
         if len(y) == 0:
             continue
 
-        # 基础指标
+        # Basic metrics
         try:
             accuracy += accuracy_score(y, p)
             precision += precision_score(y, p, zero_division=0)
             recall += recall_score(y, p, zero_division=0)
             f1 += f1_score(y, p, zero_division=0)
-            # AUC / PRC 在全负或全正时会报错 -> 加保护
+            # Guard against AUC/PRC errors when all labels have the same class
             if len(np.unique(y)) > 1:
                 auc += roc_auc_score(y, s)
                 prc += average_precision_score(y, s)
             else:
-                # 单一类别时，给一个中性值（也可以选择 continue 不计入平均）
+                # Use a neutral value for a single class (alternatively, skip it in the average)
                 auc += 0.5
-                prc += float(y.mean())  # 正类比例
+                prc += float(y.mean())  # Positive-class fraction
             mcc += matthews_corrcoef(y, p)
         except Exception:
-            # 极端情况下的兜底
+            # Fallback for exceptional cases
             pass
 
-        # 你原有的自定义指标（保持接口一致）
+        # Existing custom metrics (preserving the interface)
         try:
             oss += cal_os(y, p)
             fpr += cal_fpr(y, p)
         except Exception:
             pass
 
-        # 新增 top-k 类指标（这里 L 已是不含 CLS 的长度）
+        # Additional top-k metrics (L already excludes CLS here)
         try:
             recall_at_5p += topk_recall(s, y, L=len(y), percent=0.05, has_cls=False)
             recall_at_10p += topk_recall(s, y, L=len(y), percent=0.10, has_cls=False)
         except Exception:
             pass
 
-    # 取平均
+    # Compute averages
     div = float(B) if B > 0 else 1.0
     return {
         'accuracy': accuracy / div,
@@ -287,7 +287,7 @@ def measure(all_labels, all_preds, probabilities, lengths):
         'mcc': mcc / div,
         'oss': oss / div,
         'fpr': fpr / div,
-        # 新增
+        # Additional metric
         'recall_at_5p': recall_at_5p / div,
         'recall_at_10p': recall_at_10p / div,
     }
