@@ -4,13 +4,13 @@ from transformers import AutoModel
 from utils.util_functions import cos_sim, kl_loss
 
 # ===============================================================
-# BridgeTower: 基础组件
+# BridgeTower: core components
 # ===============================================================
 
 class BridgeLayer(nn.Module):
     """
-    最简稳健的桥接：Add (+) 后接 LayerNorm。
-    用于把“该层的单模态语义”注入到当前跨模态表征中。
+    A simple, stable bridge: addition followed by LayerNorm.
+    Injects layer-specific unimodal semantics into the current cross-modal representation.
     """
     def __init__(self, d_model, use_ln=True):
         super().__init__()
@@ -18,8 +18,8 @@ class BridgeLayer(nn.Module):
 
     def forward(self, x_cross, y_uni):
         """
-        x_cross: (B, Lq, d)  当前跨模态状态（Query所在流）
-        y_uni:   (B, Lq或1, d) 外来单模态注入（可自动按长度广播）
+        x_cross: (B, Lq, d)  Current cross-modal state (the query stream)
+        y_uni:   (B, Lq or 1, d) Incoming unimodal features (broadcast across length when needed)
         """
         if y_uni.size(1) == 1 and x_cross.size(1) > 1:
             y_uni = y_uni.expand(-1, x_cross.size(1), -1)
@@ -28,8 +28,8 @@ class BridgeLayer(nn.Module):
 
 class TriModalCrossBlock(nn.Module):
     """
-    三模态交互块（以序列AA tokens为Query；Text与gLM为Key/Value）
-    顺序：Seq自注意力 → Seq<-Text跨注意力 → Seq<-gLM跨注意力 → FFN
+    Trimodal interaction block (AA sequence tokens as queries; text and gLM as keys/values)
+    Order: sequence self-attention -> sequence-to-text cross-attention -> sequence-to-gLM cross-attention -> FFN
     """
     def __init__(self, d_model=768, nhead=8, dropout=0.1):
         super().__init__()
@@ -56,14 +56,14 @@ class TriModalCrossBlock(nn.Module):
 
 
 # ===============================================================
-# Post-Fusion MetaAdapter（非线性交互 + 向量门控）
+# Post-fusion MetaAdapter (nonlinear interaction and vector gating)
 # ===============================================================
 
 class MetaAdapterFusionLayer(nn.Module):
     """
     Gated Bi-Modal Interaction Fusion
-    在 MMSite 的 plm_dim=768 与 gLM 的 glm_dim=1280 间建立非线性交互关系。
-    输出维度保持 plm_dim 以兼容下游与元学习。
+    Models nonlinear interactions between the MMSite representation (plm_dim=768) and the gLM representation (glm_dim=1280).
+    Keeps the output dimension at plm_dim for downstream processing and meta-learning.
     """
     def __init__(self, plm_dim: int, glm_dim: int, hidden_dim: int = 512, residual_scale: float = 0.1):
         super().__init__()
@@ -82,21 +82,21 @@ class MetaAdapterFusionLayer(nn.Module):
             nn.Linear(hidden_dim, plm_dim)
         )
 
-        # 非线性交互项
+        # Nonlinear interaction term
         self.cross_layer = nn.Linear(plm_dim, plm_dim)
 
-        # 向量级门控
+        # Vector-level gate
         self.gate = nn.Linear(plm_dim * 2, plm_dim)
 
-        # 稳定层
+        # Normalization for stability
         self.norm = nn.LayerNorm(plm_dim)
 
-        # 初始化 gate 偏置为 0，使初始 α≈0.5 更稳
+        # Initialize the gate bias to zero so the initial alpha is approximately 0.5
         nn.init.zeros_(self.gate.bias)
 
     def forward(self, em_plm, em_glm):
         """
-        em_plm: [B, 768]  - MMSite 融合表示
+        em_plm: [B, 768]  - MMSite fused representation
         em_glm: [B, 1280] - gLM embedding（protein-level）
         """
         em_glm = em_glm.to(em_plm.device)
@@ -111,27 +111,27 @@ class MetaAdapterFusionLayer(nn.Module):
         fused = fused + self.residual_scale * em_plm
         fused = self.norm(fused)
 
-        alpha_mean = z.mean(dim=-1)  # 日志可视化
+        alpha_mean = z.mean(dim=-1)  # Logged for visualization
         return fused, alpha_mean
 
 
 # ===============================================================
-# 模型主体：AP_align_fuse（BridgeTower + MMSite + gLM）
+# Main model: AP_align_fuse (BridgeTower + MMSite + gLM)
 # ===============================================================
 
 class AP_align_fuse(nn.Module):
     """
-    1) MMSite：文本/序列的共享对齐（STEnc）+ Fusion Attention（稳定器）
-    2) BridgeTower@Shared（4层）：逐层 Bridge(seq/text/gLM) + Tri-Modal Cross
-    3) Post-Fusion：MetaAdapter 与 gLM 非线性后融合（元学习入口）
-    4) BridgeTower@Token（2层）：每层后再次注入 gLM（影响残基级）
+    1) MMSite: shared text/sequence alignment (STEnc) and Fusion Attention (stabilizer)
+    2) BridgeTower@Shared (four layers): per-layer sequence/text/gLM bridges and trimodal cross-attention
+    3) Post-fusion: nonlinear gLM fusion through MetaAdapter (meta-learning entry point)
+    4) BridgeTower@Token (two layers): inject gLM after each layer to affect residue-level features
     """
     def __init__(self, config, hidden_size=256):
         super().__init__()
         self.config = config
         self.tau = config.tau
 
-        # 预训练单模态编码器（冻结）
+        # Frozen pretrained unimodal encoders
         self.text_model = AutoModel.from_pretrained(
             f'{config.model.model_dir}/{config.model.pubmed_version}'
         )
@@ -141,15 +141,15 @@ class AP_align_fuse(nn.Module):
         for p in self.text_model.parameters(): p.requires_grad = False
         for p in self.seq_model.parameters():  p.requires_grad = False
 
-        # 维度设置
+        # Dimension settings
         self.plm_dim_seq = 1280   # ESM token hidden
-        self.fusion_dim  = 768    # 对齐/融合共享维度
+        self.fusion_dim  = 768    # Shared alignment and fusion dimension
 
         self.num_attr = 17
         self.function_len = 128
         self.num_labels = 2
 
-        # ===== 文本/序列编码与共享对齐（保留 MMSite 设计） =====
+        # ===== Text/sequence encoding and shared alignment (retaining the MMSite design) =====
         self.project = nn.Linear(self.plm_dim_seq, self.fusion_dim)
 
         self.texts_encoder = nn.ModuleList(
@@ -167,12 +167,12 @@ class AP_align_fuse(nn.Module):
         self.seq_suffix_encoder = nn.TransformerEncoderLayer(d_model=self.plm_dim_seq, nhead=4, dropout=0.1)
         self.seq_suffix_transformer = nn.TransformerEncoder(self.seq_suffix_encoder, num_layers=2)
 
-        # 共享 Transformer（4层）+ Fusion Attention（稳定器）
+        # Four-layer shared Transformer and Fusion Attention stabilizer
         self.share_encoder = nn.TransformerEncoderLayer(d_model=self.fusion_dim, nhead=8, dropout=0.1)
         self.share_transformer = nn.TransformerEncoder(self.share_encoder, num_layers=4)
         self.fusion_cross = nn.MultiheadAttention(self.fusion_dim, num_heads=4, dropout=0.1, batch_first=True)
 
-        # ===== Token 头（保留你的实现） =====
+        # ===== Token prediction head (retaining the existing implementation) =====
         self.token_suffix_encoder_res = nn.TransformerEncoderLayer(
             d_model=self.fusion_dim + self.plm_dim_seq, nhead=4, dropout=0.1
         )
@@ -183,13 +183,13 @@ class AP_align_fuse(nn.Module):
         self.fc2 = nn.Linear(self.fusion_dim, hidden_size)
         self.classifier_token = nn.Linear(hidden_size, 2)
 
-        # ===== 后融合 Meta-Adapter（元学习入口） =====
+        # ===== Post-fusion MetaAdapter (meta-learning entry point) =====
         self.meta_fusion_post = MetaAdapterFusionLayer(
             plm_dim=self.fusion_dim, glm_dim=1280, hidden_dim=512, residual_scale=0.1
         )
 
-        # ===== BridgeTower 新增：多层桥接组件 =====
-        # Shared（4层）
+        # ===== Additional BridgeTower components: multi-layer bridges =====
+        # Shared stage (four layers)
         self.k_shared_layers = 4
         self.shared_bridges_seq  = nn.ModuleList([BridgeLayer(self.fusion_dim) for _ in range(self.k_shared_layers)])
         self.shared_bridges_text = nn.ModuleList([BridgeLayer(self.fusion_dim) for _ in range(self.k_shared_layers)])
@@ -199,14 +199,14 @@ class AP_align_fuse(nn.Module):
         )
         self.proj_glm_to_fusion  = nn.Linear(1280, self.fusion_dim)  # gLM 1280 → 768
 
-        # Token 后缀（2层）
+        # Token suffix (two layers)
         self.k_token_layers = 2
         self.token_bridges_glm = nn.ModuleList(
             [BridgeLayer(self.fusion_dim + self.plm_dim_seq) for _ in range(self.k_token_layers)]
         )
 
     # ===========================================================
-    # 一些公共子函数（与原始保持一致接口）
+    # Shared helper methods (preserving the original interfaces)
     # ===========================================================
 
     def _get_similarity(self, image_features, text_features):
@@ -217,7 +217,7 @@ class AP_align_fuse(nn.Module):
 
     def _softlabel_loss_3d(self, seq_features, text_features, tau):
         """
-        用 shared 段输出进行软标签对齐（与 MMSite 一致）。
+        Align soft labels using the output of the shared stage, as in MMSite.
         """
         seq_features  = seq_features.mean(dim=1)
         text_features = text_features.mean(dim=1)
@@ -231,7 +231,7 @@ class AP_align_fuse(nn.Module):
 
     def _get_text_branch_output(self, text_outputs):
         """
-        MACross + suffix transformer（与你原实现一致）
+        MACross and suffix Transformer (consistent with the existing implementation)
         """
         texts_output = [self.texts_encoder[i](text_outputs[i][0]) for i in range(self.num_attr)]
         texts_output_cls = [texts_output[idx][:, 0, :].unsqueeze(1) for idx in range(len(texts_output)) if idx != 3]
@@ -246,7 +246,7 @@ class AP_align_fuse(nn.Module):
         return x  # (B, M, 768)
 
     # ===========================================================
-    # 前向：BridgeTower@Shared + Fusion + post-fusion + BridgeTower@Token
+    # Forward pass: BridgeTower@Shared, fusion, post-fusion, and BridgeTower@Token
     # ===========================================================
 
     def forward(self,
@@ -256,7 +256,7 @@ class AP_align_fuse(nn.Module):
 
         device = anchor_seq_input_ids.device
 
-        # ---- 文本侧 ----
+        # ---- Text branch ----
         if not test:
             text_list = []
             for i in range(len(anchor_text_input_ids)):
@@ -265,17 +265,17 @@ class AP_align_fuse(nn.Module):
         else:
             text_out = self._get_model_output(anchor_text_input_ids, anchor_text_attention_mask, 'text')
 
-        # ---- 序列侧（AA token）----
+        # ---- Sequence branch (AA tokens)----
         seq_out = self._get_model_output(anchor_seq_input_ids, anchor_seq_attention_mask, 'seq')
         aa_hidden = seq_out[0]  # (B, L, 1280)
 
-        # ---- 文本支路聚合（与你一致）----
+        # ---- Text-branch aggregation (consistent with the existing implementation)----
         if not test:
             text_branch = self._get_text_branch_output(text_list)  # (B,M,768)
         else:
             text_branch = text_out[0]
 
-        # ---- gLM 向量（查表/占位）----
+        # ---- gLM vector (lookup or placeholder)----
         if entry_ids is not None and hasattr(self, "glm_lookup"):
             glm_vec = self.glm_lookup(entry_ids)
             if not isinstance(glm_vec, torch.Tensor):
@@ -285,7 +285,7 @@ class AP_align_fuse(nn.Module):
             glm_vec = torch.zeros((aa_hidden.size(0), 1280), dtype=aa_hidden.dtype, device=device)
 
         # =======================================================
-        # BridgeTower@Shared：逐层桥接 + 三模态交互（4层）
+        # BridgeTower@Shared: per-layer bridges and trimodal interaction (four layers)
         # =======================================================
         seq_mean = aa_hidden.mean(dim=1)                 # (B,1280)
         x_seq  = self.project(seq_mean).unsqueeze(1)     # (B,1,768)
@@ -293,16 +293,16 @@ class AP_align_fuse(nn.Module):
         x_glm  = self.proj_glm_to_fusion(glm_vec).unsqueeze(1)  # (B,1,768)
 
         for t in range(self.k_shared_layers):
-            # Add&Norm 桥接：把该层单模态语义注入当前跨模态状态
-            # 这里对 text 用 mean-pool 注入，可按需替换成更细粒度策略
-            x_seq  = self.shared_bridges_seq[t](x_seq,  x_seq)   # 自桥，形式统一（也可去掉）
+            # Add-and-normalize bridge: inject unimodal semantics into the current cross-modal state
+            # Inject mean-pooled text here; this can be replaced with a finer-grained strategy
+            x_seq  = self.shared_bridges_seq[t](x_seq,  x_seq)   # Self-bridge for a uniform structure (optional)
             x_seq  = self.shared_bridges_text[t](x_seq, x_text.mean(dim=1, keepdim=True))
             x_seq  = self.shared_bridges_glm[t](x_seq,  x_glm)
-            # 三模态交互：Seq 为 Q，Text & gLM 为 KV
+            # Trimodal interaction: sequence as queries, text and gLM as keys/values
             x_seq = self.shared_cross_blocks[t](x_seq, x_text, x_glm)
 
         # =======================================================
-        # Fusion Attention（保留你的稳定器作为“第0层门”）
+        # Fusion Attention (retaining the stabilizer as a preliminary gate)
         # =======================================================
         seq_shared  = x_seq
         text_shared = x_text
@@ -310,12 +310,12 @@ class AP_align_fuse(nn.Module):
         fusion_vec = fusion_tensor.squeeze(1)                                       # (B,768)
 
         # =======================================================
-        # Post-Fusion：MetaAdapter 与 gLM 非线性后融合（元学习入口）
+        # Post-fusion: nonlinear gLM fusion through MetaAdapter (meta-learning entry point)
         # =======================================================
         fusion_vec_fused, alpha = self.meta_fusion_post(fusion_vec, glm_vec)        # (B,768), (B,)
 
         # =======================================================
-        # BridgeTower@Token：在 token 后缀每层后再桥接注入 gLM
+        # BridgeTower@Token: inject gLM through a bridge after each token-suffix layer
         # =======================================================
         aa_ctx = self.seq_suffix_transformer(aa_hidden)  # (B, L, 1280)
         fusion_expanded = fusion_vec_fused.unsqueeze(1).expand(-1, aa_ctx.size(1), -1)  # (B,L,768)
@@ -324,20 +324,20 @@ class AP_align_fuse(nn.Module):
         glm_tok = self.proj_glm_to_fusion(glm_vec).unsqueeze(1).expand(-1, x_tok.size(1), -1)  # (B,L,768)
         for t in range(self.k_token_layers):
             x_tok = self.token_suffix_transformer_res.layers[t](x_tok)
-            # y_uni 必须和 x_tok 维度一致：2048 = 1280(AA) + 768(fusion)
-            # 在 AA 部分填 0，在 fusion 部分填入 glm_tok
+            # y_uni must match x_tok: 2048 = 1280 (AA) + 768 (fusion)
+            # Fill the AA portion with zeros and the fusion portion with glm_tok
             g_pad = torch.zeros_like(x_tok)
-            g_pad[..., self.plm_dim_seq:] = glm_tok  # 把后 768 段替换为 glm_tok
+            g_pad[..., self.plm_dim_seq:] = glm_tok  # Place glm_tok in the final 768 dimensions
             x_tok = self.token_bridges_glm[t](x_tok, g_pad)
 
         # =======================================================
-        # Token 级预测头（与你一致）
+        # Token-level prediction head (consistent with the existing implementation)
         # =======================================================
         h = x_tok
         h = torch.relu(self.bn2_res(self.fc2_res(h).permute(0, 2, 1)).permute(0, 2, 1))
         token_logits = self.classifier_token(h)[:, :, self.num_labels - 1].squeeze(-1)
 
-        # 对齐阶段的软标签对齐损失（seq_shared/text_shared）
+        # Soft-label alignment loss for the alignment stage (seq_shared/text_shared)
         cl_loss = self._softlabel_loss_3d(seq_shared, text_shared, tau=self.tau)
 
         return {

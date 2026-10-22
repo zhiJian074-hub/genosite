@@ -16,23 +16,23 @@ device, pprint = None, None
 import torch.nn.functional as F
 
 # ============================================================
-# 融合参数识别配置（加入 BridgeTower / MetaAdapter 相关命名）
+# Fusion parameter name patterns (including BridgeTower and MetaAdapter)
 # ============================================================
 _FUSION_KEYS = [
-    # === 保留可能出现的旧命名 ===
+    # === Retain possible legacy names ===
     "fusion_ctx", "proj_glm", "meta_adapter", "fusion_head",
     "post_fuse", "glm_gate", "glm_mlp",
 
-    # === 你的真实字段名 ===
-    "meta_fusion_post",     # 后融合 MetaAdapter（元学习入口）
+    # === Actual parameter names used here ===
+    "meta_fusion_post",     # Post-fusion MetaAdapter (meta-learning entry point)
 
-    # === BridgeTower 相关部件 ===
+    # === BridgeTower components ===
     "shared_bridges_seq", "shared_bridges_text", "shared_bridges_glm",
     "shared_cross_blocks", "token_bridges_glm", "proj_glm_to_fusion",
 
-    # === 非线性交互层 / 向量门控（MetaAdapter 内部）
+    # === Nonlinear interaction layer and vector gate within MetaAdapter
     "cross_layer", "gate",
-    # === 兜底（若你改过名字也能命中）
+    # === Fallback patterns for renamed parameters
     "fusion_adapter", "fusion_layer", "fusion_block", "fusion_gate_layer", "fusion_linear", "glm_adapter",
 ]
 
@@ -44,13 +44,13 @@ def freeze_all_except_fusion(model: nn.Module):
         p.requires_grad = _is_fusion_param(n)
 
 def get_fusion_param_state(model: nn.Module):
-    """仅提取融合相关参数的 state_dict 子集"""
+    """Extract only the fusion-related subset of the state_dict."""
     sd = model.state_dict()
     return {k: v.detach().clone() for k, v in sd.items() if _is_fusion_param(k)}
 
 @torch.no_grad()
 def load_fusion_param_state_(model: nn.Module, sub_state: dict):
-    """写回融合相关参数子集"""
+    """Restore the fusion-related parameter subset."""
     for k, v in sub_state.items():
         if k in model.state_dict():
             model.state_dict()[k].copy_(v)
@@ -65,7 +65,7 @@ def reptile_update_(model: nn.Module, old_sub: dict, step_sub: dict, beta: float
 
 
 # ============================================================
-# 轻量 MAML / Reptile 风格元学习（Post-Fusion）
+# Lightweight MAML/Reptile-style meta-learning (post-fusion)
 # ============================================================
 def meta_train_post_fusion_maml(model: nn.Module,
                                 train_loader,
@@ -78,11 +78,11 @@ def meta_train_post_fusion_maml(model: nn.Module,
                                 align_weight: float = 0.0,
                                 ortho_weight: float = 0.0):
     """
-    Post-Fusion 元学习阶段（真实指标命名版本）
-    - 每 batch 拆分为 support/query
-    - Inner-loop: 支持集上更新融合参数
-    - Outer-loop: Reptile 风格更新
-    - 每 epoch 记录一次训练指标（f1），并保存最优模型
+    Post-fusion meta-learning stage (using the actual metric names)
+    - Split each batch into support and query sets
+    - Inner-loop: Update fusion parameters on the support set
+    - Outer-loop: Reptile-style update
+    - Record training F1 each epoch and save the best model
     """
 
     pprint("Stage 2.5: Meta-learning (post-fusion MAML/Reptile) ...")
@@ -124,7 +124,7 @@ def meta_train_post_fusion_maml(model: nn.Module,
 
             old_sub = get_fusion_param_state(model)
 
-            # Inner-loop: 在 support 集上学习
+            # Inner-loop: Learn on the support set
             for _ in range(inner_steps):
                 inner_opt.zero_grad()
                 out_sup = model(
@@ -138,7 +138,7 @@ def meta_train_post_fusion_maml(model: nn.Module,
                 loss_sup.backward()
                 inner_opt.step()
 
-            # Outer-loop 更新（Reptile）
+            # Outer-loop update (Reptile)
             step_sub = get_fusion_param_state(model)
             load_fusion_param_state_(model, old_sub)
             reptile_update_(model, old_sub, step_sub, beta=float(config.meta.alpha))
@@ -155,7 +155,7 @@ def meta_train_post_fusion_maml(model: nn.Module,
                     q_loss = bce(out_qry["token_logits"].float(), qry_lab.float()).item()
                     pprint(f"[Meta] ep={ep+1} step={step} | q_loss={q_loss:.6f}")
 
-        # === 计算 epoch 平均指标（用整个 train_loader） ===
+        # === Compute epoch-average metrics over the full train_loader ===
         model.eval()
         with torch.no_grad():
             for texts, seq, y, L, meta in tqdm(train_loader, desc=f"MetaEval {ep+1}/{epochs}"):
@@ -181,11 +181,11 @@ def meta_train_post_fusion_maml(model: nn.Module,
             tr[k] /= len(train_loader)
         log_metrics(pprint, 'meta-train', ep+1, tr, 'Token')
 
-        # === 保存最优模型 ===
+        # === Save the best model ===
         if tr.get('f1', 0.0) > best_f1:
             best_f1, best_metrics = tr['f1'], tr
             os.makedirs(config.train.save_path, exist_ok=True)
-            # 清理旧的 meta 模型
+            # Remove the previous meta-model checkpoint
             for f in os.listdir(config.train.save_path):
                 if f.startswith("best_model_fuse_meta_"):
                     try:
@@ -209,7 +209,7 @@ def meta_train_post_fusion_maml(model: nn.Module,
 
 
 # ============================================================
-# 数据加载、Align、Fuse、Evaluate、Test
+# Data loading, alignment, fusion, evaluation, and testing
 # ============================================================
 
 def prepare_dataloaders(config):
@@ -218,7 +218,7 @@ def prepare_dataloaders(config):
     align_val_dataset = MyDataset(config, 'valid', align=True)
     test_dataset = MyDataset(config, 'test')
 
-    # Debug 子集
+    # Debug subset
     if 'sample_ratio' in config['dataset']:
         ratio = config['dataset']['sample_ratio']
         if ratio < 1.0:
@@ -270,7 +270,7 @@ def align(model, train_loader, align_valid_loader, config):
             best_loss, best_metrics = val_metrics['loss'], val_metrics
 
             os.makedirs(config.train.save_path, exist_ok=True)
-            # 清理旧的 align 最优
+            # Remove the previous best alignment checkpoint
             for f in os.listdir(config.train.save_path):
                 if f.startswith("best_model_align_"):
                     try: os.remove(os.path.join(config.train.save_path, f))
@@ -287,14 +287,14 @@ def align(model, train_loader, align_valid_loader, config):
 
 def meta_train(model, train_loader, meta_cfg):
     """
-    仅训练 Post-Fusion 的 meta_fusion_post（保留旧接口，按需使用）
+    Train only post-fusion meta_fusion_post (legacy interface, used when needed)
     """
     print("Stage 2.5: Meta-learning (post-fusion Meta-Adapter) ...")
 
     model.to(device)
     model.train()
 
-    # 冻结全局，仅开放 meta_fusion_post
+    # Freeze all parameters except meta_fusion_post
     for p in model.parameters():
         p.requires_grad = False
     for p in model.meta_fusion_post.parameters():
@@ -330,7 +330,7 @@ def meta_train(model, train_loader, meta_cfg):
 
         print(f"✅ Meta epoch {ep+1} avg loss: {running/len(train_loader):.6f}")
 
-    # 恢复参数可训练
+    # Restore parameter trainability
     for p in model.parameters():
         p.requires_grad = True
     print("✅ 元学习阶段完成。")
@@ -341,11 +341,11 @@ def fuse(checkpoint_align, train_loader, val_loader, config):
     model.to(device)
     model.train()
 
-    # 冻结 meta_fusion_post（不覆盖已学到的门控）
+    # Freeze meta_fusion_post to preserve the learned gate
     for p in model.meta_fusion_post.parameters():
         p.requires_grad = False
 
-    # 只训练 token head + 后缀模块（与原论文一致）
+    # Train only the token head and suffix modules, as in the original paper
     suffixes = [
         'seq_suffix_encoder', 'seq_suffix_transformer',
         'token_suffix_encoder_res', 'token_suffix_transformer_res',
@@ -400,7 +400,7 @@ def fuse(checkpoint_align, train_loader, val_loader, config):
             best_f1, best_metrics = val_metrics['f1'], val_metrics
 
             os.makedirs(config.train.save_path, exist_ok=True)
-            # 清理旧的 fuse 最优
+            # Remove the previous best fusion checkpoint
             for f in os.listdir(config.train.save_path):
                 if f.startswith("best_model_fuse_"):
                     try: os.remove(os.path.join(config.train.save_path, f))
@@ -459,7 +459,7 @@ def test(model, ckpt, loader, config):
     model.eval()
     tok = {m:0.0 for m in config.train.metrics}
 
-    # 🧩 新增统计总样本数
+    # 🧩 Count the total number of samples
     total_samples = len(loader.dataset)
     pprint(f"📊 一共测试样本数: {total_samples}")
 
@@ -486,7 +486,7 @@ def test(model, ckpt, loader, config):
 
 if __name__ == '__main__':
 
-    # 🧹 清理显存
+    # 🧹 Clear GPU memory cache
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
@@ -502,7 +502,7 @@ if __name__ == '__main__':
     train_loader, val_loader, align_valid_loader, test_loader = prepare_dataloaders(config)
     pprint("✅ 数据加载器已就绪。")
 
-    # ========== Stage 0: 构建初始模型 ==========
+    # ========== Stage 0: Build the initial model ==========
     base_model = get_model(pprint, config)
     base_model.glm_lookup = GLMEmbeddingLookup("gLM/batch.pkl.glm.embs.pkl")
 
@@ -514,8 +514,8 @@ if __name__ == '__main__':
     pprint("Stage 2: Fusing ...")
     ckpt_fuse = fuse(ckpt_align, train_loader, val_loader, config)
 
-    # ========== Stage 2.5: 在 fuse 最优模型上做 Post-Fusion Meta ==========
-    # 重新构造一个模型实例，并加载 fuse 后的最佳权重
+    # ========== Stage 2.5: Run post-fusion meta-learning on the best fusion model ==========
+    # Create a new model instance and load the best fusion weights
     meta_model = get_model(pprint, config)
     meta_model.glm_lookup = GLMEmbeddingLookup("gLM/batch.pkl.glm.embs.pkl")
     state_fuse = torch.load(ckpt_fuse, map_location='cpu')
@@ -532,7 +532,7 @@ if __name__ == '__main__':
         ortho_weight=0.0
     )
 
-    # # 🔐 保存元学习后的模型 ckpt
+    # # 🔐 Save the checkpoint after meta-learning
     # os.makedirs(config.train.save_path, exist_ok=True)
     # ckpt_meta = os.path.join(
     #     config.train.save_path,
@@ -541,7 +541,7 @@ if __name__ == '__main__':
     # torch.save(meta_model.state_dict(), ckpt_meta, _use_new_zipfile_serialization=False)
     # pprint(f"💾 Saving meta-learned fused model -> {ckpt_meta}")
 
-    # # ========== Stage 4: Test 使用 meta 版本 ==========
+    # # ========== Stage 4: Test using the meta-trained version ==========
     # pprint("Stage 4: Testing (Meta) ...")
     # test(meta_model, ckpt_meta, test_loader, config)
 
